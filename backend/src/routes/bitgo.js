@@ -18,9 +18,19 @@ const { BitGo } = require('bitgo');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
-const bitgo = new BitGo({ env: 'test' });
-bitgo.authenticateWithAccessToken({ accessToken: process.env.BITGO_ACCESS_TOKEN });
-const coin = bitgo.coin('teth');
+// Lazy init — don't crash on startup if token isn't set yet
+let _bitgo = null;
+let _coin  = null;
+
+function getBitgo() {
+  if (!_bitgo) {
+    if (!process.env.BITGO_ACCESS_TOKEN) throw new Error('BITGO_ACCESS_TOKEN not configured');
+    _bitgo = new BitGo({ env: 'test' });
+    _bitgo.authenticateWithAccessToken({ accessToken: process.env.BITGO_ACCESS_TOKEN });
+    _coin  = _bitgo.coin('teth');
+  }
+  return { bitgo: _bitgo, coin: _coin };
+}
 
 // ── Provision ─────────────────────────────────────────────────────────────────
 // POST /bitgo/wallet
@@ -30,6 +40,7 @@ router.post('/wallet', requireAuth, async (req, res) => {
   const { passphrase } = req.body;
   if (!passphrase) return res.status(400).json({ error: 'passphrase required' });
   try {
+    const { coin } = getBitgo();
     const result = await coin.wallets().generateWallet({
       label:      `nfc_wallet_${req.user.sub.slice(0, 8)}`,
       passphrase,
@@ -57,6 +68,7 @@ router.get('/address', requireAuth, async (req, res) => {
       [req.user.sub],
     );
     if (!rows[0]?.bitgo_wallet_id) return res.status(404).json({ error: 'No BitGo wallet' });
+    const { coin } = getBitgo();
     const wallet = await coin.wallets().get({ id: rows[0].bitgo_wallet_id });
     const { address } = await wallet.createAddress();
     res.json({ address });
@@ -75,6 +87,7 @@ router.get('/balance', requireAuth, async (req, res) => {
       [req.user.sub],
     );
     if (!rows[0]?.bitgo_wallet_id) return res.status(404).json({ error: 'No BitGo wallet' });
+    const { coin } = getBitgo();
     const wallet = await coin.wallets().get({ id: rows[0].bitgo_wallet_id });
     res.json({
       balanceWei:      wallet.balanceString(),
@@ -105,6 +118,7 @@ router.post('/send', requireAuth, async (req, res) => {
     if (!rows[0]?.bitgo_wallet_id) {
       return res.status(404).json({ error: 'Payer has no BitGo wallet' });
     }
+    const { coin } = getBitgo();
     const wallet = await coin.wallets().get({ id: rows[0].bitgo_wallet_id });
     // BitGo ETH amounts are in wei (as string to avoid float precision issues)
     const amountWei = BigInt(Math.round(parseFloat(amountEth) * 1e18)).toString();
