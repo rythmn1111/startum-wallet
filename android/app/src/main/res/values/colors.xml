@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#0F0C29</color>
+    <color name="purple_accent">#A855F7</color>
+    <color name="dark_background">#0F0C29</color>
+    <color name="dark_surface">#1A1740</color>
+    <color name="dark_card">#221E4A</color>
+</resources>
