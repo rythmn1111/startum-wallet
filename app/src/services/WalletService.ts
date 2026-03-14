@@ -1,26 +1,32 @@
 /**
- * WalletService — BIP39 mnemonic, BIP44 HD key derivation, key splitting.
- * ETH: secp256k1 via @scure/bip32
- * SOL: ed25519 via SLIP-0010 manual derivation using @noble/hashes
+ * WalletService — BIP39 mnemonic, BIP44 HD key derivation, combined key splitting.
+ *
+ * Flow:
+ *   mnemonic → eth_priv (32 bytes) + sol_priv (32 bytes)
+ *   combined = eth_priv || sol_priv  (64 bytes)
+ *   encrypted = AES-256-GCM(combined, password)  →  ciphertext (64 bytes) + iv + tag + salt
+ *   [nfcHalf, serverHalf] = XOR-split(ciphertext)
+ *   NFC card stores: walletId + nfcHalf
+ *   Server stores:   walletId + serverHalf + iv + tag + salt + ethAddress + solAddress
+ *
+ * ETH: secp256k1 via @scure/bip32, path m/44'/60'/0'/0/0
+ * SOL: ed25519 via SLIP-0010, path m/44'/501'/0'/0'
  */
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { HDKey } from '@scure/bip32';
 import { ethers } from 'ethers';
-import { encrypt, xorSplit, xorCombine, decrypt, hexToBytes, bytesToHex } from './CryptoService';
-import type { KeySplit, ServerKeyHalfResponse } from '../types';
-
-// SLIP-0010 ed25519 derivation (Solana uses m/44'/501'/0'/0')
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
+import QuickCrypto from 'react-native-quick-crypto';
+import { encrypt, decrypt, xorSplit, xorCombine, hexToBytes, bytesToHex } from './CryptoService';
+import type { CombinedKeySplit, ServerWalletResponse } from '../types';
 
 function slip10DeriveEd25519(seed: Uint8Array, path: string): Uint8Array {
-  // Master key from seed
   let I = hmac(sha512, new TextEncoder().encode('ed25519 seed'), seed);
   let key = I.slice(0, 32);
   let chainCode = I.slice(32);
 
-  // Parse path: m/44'/501'/0'/0'
   const segments = path.split('/').slice(1);
   for (const seg of segments) {
     const hardened = seg.endsWith("'");
@@ -36,20 +42,25 @@ function slip10DeriveEd25519(seed: Uint8Array, path: string): Uint8Array {
   return key;
 }
 
+function randomWalletId(): string {
+  // 8 random bytes as a 16-char hex string — used as the NFC card lookup key
+  const bytes = QuickCrypto.getRandomValues(new Uint8Array(8));
+  return bytesToHex(bytes);
+}
+
 export async function generateWallets() {
   const mnemonic = bip39.generateMnemonic(wordlist, 128); // 12 words
   const seed = await bip39.mnemonicToSeed(mnemonic);
 
   // ETH — BIP44: m/44'/60'/0'/0/0
-  const hdRoot = HDKey.fromMasterSeed(seed);
+  const hdRoot  = HDKey.fromMasterSeed(seed);
   const ethNode = hdRoot.derive("m/44'/60'/0'/0/0");
   if (!ethNode.privateKey) throw new Error('Failed to derive ETH private key');
-  const ethWallet = new ethers.Wallet(bytesToHex(ethNode.privateKey));
+  const ethWallet  = new ethers.Wallet(bytesToHex(ethNode.privateKey));
   const ethAddress = ethWallet.address;
 
   // SOL — SLIP-0010 ed25519: m/44'/501'/0'/0'
   const solPrivKey = slip10DeriveEd25519(seed, "m/44'/501'/0'/0'");
-  // Derive public key using tweetnacl (bundled with @solana/web3.js)
   const nacl = require('tweetnacl');
   const solKeypair = nacl.sign.keyPair.fromSeed(solPrivKey);
   const solAddress = bs58Encode(solKeypair.publicKey);
@@ -63,56 +74,70 @@ export async function generateWallets() {
   };
 }
 
-export async function restoreWallets(mnemonic: string) {
-  const seed = await bip39.mnemonicToSeed(mnemonic);
-  const hdRoot = HDKey.fromMasterSeed(seed);
-  const ethNode = hdRoot.derive("m/44'/60'/0'/0/0");
-  if (!ethNode.privateKey) throw new Error('Failed to derive ETH key');
-  const ethAddress = new ethers.Wallet(bytesToHex(ethNode.privateKey)).address;
+/**
+ * Encrypt both private keys together and XOR-split the ciphertext.
+ * Returns everything needed for NFC write + server storage.
+ */
+export async function splitCombinedKeys(
+  ethPrivKeyHex: string,
+  solPrivKeyHex: string,
+  ethAddress: string,
+  solAddress: string,
+  password: string,
+): Promise<CombinedKeySplit> {
+  // Concatenate both 32-byte private keys → 64-byte plaintext
+  const ethBytes = hexToBytes(ethPrivKeyHex);
+  const solBytes = hexToBytes(solPrivKeyHex);
+  const combined = new Uint8Array(64);
+  combined.set(ethBytes, 0);
+  combined.set(solBytes, 32);
 
-  const solPrivKey = slip10DeriveEd25519(seed, "m/44'/501'/0'/0'");
-  const nacl = require('tweetnacl');
-  const solKeypair = nacl.sign.keyPair.fromSeed(solPrivKey);
-  const solAddress = bs58Encode(solKeypair.publicKey);
+  // Encrypt combined blob
+  const bundle = await encrypt(combined, password);
 
-  return { ethAddress, ethPrivateKey: bytesToHex(ethNode.privateKey), solAddress, solPrivateKey: bytesToHex(solPrivKey) };
-}
-
-export async function splitKey(
-  chain: 'ETH' | 'SOL',
-  privateKeyHex: string,
-  publicAddress: string,
-  password: string
-): Promise<KeySplit> {
-  const privBytes = hexToBytes(privateKeyHex);
-  const bundle = await encrypt(privBytes, password);
+  // XOR-split only the ciphertext (iv/tag/salt stay with server)
   const { nfcHalf, serverHalf } = xorSplit(hexToBytes(bundle.ciphertext));
+
   return {
+    walletId: randomWalletId(),
     nfcHalf,
     serverHalf,
     bundle,
-    walletId: crypto.randomUUID(),
-    publicAddress,
-    chain,
+    ethAddress,
+    solAddress,
   };
 }
 
-export async function reconstructPrivateKey(
+/**
+ * Reconstruct both private keys from NFC half + server response + password.
+ * Returns { ethPrivKey, solPrivKey } as hex strings.
+ * Caller is responsible for zeroing out keys after use.
+ */
+export async function reconstructKeys(
   nfcHalfHex: string,
-  serverBundle: ServerKeyHalfResponse,
-  password: string
-): Promise<Uint8Array> {
-  const ciphertextBytes = xorCombine(nfcHalfHex, serverBundle.serverKeyHalf);
-  const bundle = {
-    ciphertext: bytesToHex(ciphertextBytes),
-    iv: serverBundle.iv,
-    tag: serverBundle.tag,
-    salt: serverBundle.salt,
+  server: ServerWalletResponse,
+  password: string,
+): Promise<{ ethPrivKey: string; solPrivKey: string }> {
+  const ciphertextBytes = xorCombine(nfcHalfHex, server.serverHalf);
+  const plaintext = await decrypt(
+    {
+      ciphertext: bytesToHex(ciphertextBytes),
+      iv:   server.iv,
+      tag:  server.tag,
+      salt: server.salt,
+    },
+    password,
+  );
+
+  if (plaintext.length !== 64) throw new Error('Decrypted key blob has unexpected length');
+
+  return {
+    ethPrivKey: bytesToHex(plaintext.slice(0, 32)),
+    solPrivKey: bytesToHex(plaintext.slice(32, 64)),
   };
-  return decrypt(bundle, password);
 }
 
-// Minimal Base58 encoder (for Solana addresses)
+// Minimal Base58 encoder for Solana addresses
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 function bs58Encode(bytes: Uint8Array): string {
   const digits: number[] = [];

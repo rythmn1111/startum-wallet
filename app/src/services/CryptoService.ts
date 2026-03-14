@@ -7,7 +7,7 @@ import type { EncryptedKeyBundle } from '../types';
 
 const PBKDF2_ITERATIONS = 310_000;
 
-function hexToBytes(hex: string): Uint8Array {
+export function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
@@ -15,8 +15,16 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
-function bytesToHex(bytes: Uint8Array): string {
+export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('base64');
+}
+
+export function base64ToBytes(b64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(b64, 'base64'));
 }
 
 function randomBytes(count: number): Uint8Array {
@@ -42,7 +50,7 @@ export async function encrypt(plaintext: Uint8Array, password: string): Promise<
   const iv   = randomBytes(12);
   const key  = await deriveKey(password, salt);
 
-  // AES-GCM returns ciphertext || tag (16-byte tag at the end)
+  // AES-GCM returns ciphertext || tag (16-byte tag appended)
   const encrypted = new Uint8Array(
     await QuickCrypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
   );
@@ -75,18 +83,23 @@ export async function decrypt(bundle: EncryptedKeyBundle, password: string): Pro
   return new Uint8Array(result);
 }
 
+// XOR split: nfcHalf XOR serverHalf = data
 export function xorSplit(data: Uint8Array): { nfcHalf: string; serverHalf: string } {
-  const nfcHalf = randomBytes(data.length);
-  const serverHalf = new Uint8Array(data.length);
-  for (let i = 0; i < data.length; i++) serverHalf[i] = data[i] ^ nfcHalf[i];
-  return { nfcHalf: bytesToHex(nfcHalf), serverHalf: bytesToHex(serverHalf) };
+  const nfcHalfBytes   = randomBytes(data.length);
+  const serverHalfBytes = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    serverHalfBytes[i] = data[i] ^ nfcHalfBytes[i];
+  }
+  return {
+    nfcHalf:    bytesToHex(nfcHalfBytes),
+    serverHalf: bytesToHex(serverHalfBytes),
+  };
 }
 
+// XOR combine: half1 XOR half2 = original data
 export function xorCombine(half1Hex: string, half2Hex: string): Uint8Array {
   const a = hexToBytes(half1Hex);
   const b = hexToBytes(half2Hex);
   if (a.length !== b.length) throw new Error('Key halves length mismatch');
   return new Uint8Array(a.map((byte, i) => byte ^ b[i]));
 }
-
-export { hexToBytes, bytesToHex };

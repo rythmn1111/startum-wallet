@@ -1,30 +1,32 @@
--- NFC Wallet database schema
+-- splitkey_wallet database schema
+-- Combined ETH+SOL key storage with XOR-split ciphertext
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE users (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email       TEXT UNIQUE NOT NULL,
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Stores the server half of each user's encrypted private key.
--- One row per chain per user. The NFC card holds the other half.
--- server_key_half XOR nfc_key_half = AES-GCM encrypted private key
-CREATE TABLE wallet_key_halves (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    chain           TEXT NOT NULL CHECK (chain IN ('ETH', 'SOL')),
-    wallet_id       TEXT NOT NULL,          -- stable identifier written to NFC card
-    server_key_half BYTEA NOT NULL,         -- hex-stored server half of encrypted key
-    salt            TEXT NOT NULL,          -- PBKDF2 salt used during encryption (stored so iOS can re-derive)
-    iv              TEXT NOT NULL,          -- AES-GCM IV
-    tag             TEXT NOT NULL,          -- AES-GCM auth tag
-    public_address  TEXT NOT NULL,          -- readable address (not sensitive)
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, chain)
+-- One row per user wallet.
+-- NFC card stores: nfcHalf (XOR of ciphertext) + walletId.
+-- This table stores: serverHalf + iv/tag/salt for decryption.
+-- XOR(nfcHalf, serverHalf) = AES-GCM ciphertext
+-- decrypt(ciphertext, password) = eth_priv(32 bytes) || sol_priv(32 bytes)
+CREATE TABLE wallets (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    wallet_id    TEXT NOT NULL UNIQUE,   -- 16-char hex, written to NFC card
+    server_half  BYTEA NOT NULL,         -- 64-byte XOR server half of ciphertext
+    salt         TEXT NOT NULL,          -- PBKDF2 salt (hex)
+    iv           TEXT NOT NULL,          -- AES-GCM IV (hex)
+    tag          TEXT NOT NULL,          -- AES-GCM auth tag (hex)
+    eth_address  TEXT NOT NULL,
+    sol_address  TEXT NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id)
 );
 
--- Index for fast lookup during payment (wallet_id comes from NFC card)
-CREATE INDEX idx_wallet_key_halves_wallet_id ON wallet_key_halves(wallet_id);
+CREATE INDEX idx_wallets_wallet_id ON wallets(wallet_id);

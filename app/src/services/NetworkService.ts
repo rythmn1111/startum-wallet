@@ -1,8 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { KeySplit, ServerKeyHalfResponse } from '../types';
+import type { CombinedKeySplit, ServerWalletResponse } from '../types';
 
-// Change to your server URL. In Expo Go / dev, use your machine's local IP.
-// e.g. 'http://192.168.1.x:3001'  (Android emulator needs real IP, not localhost)
 const BASE_URL = 'http://62.146.173.162:3004';
 
 async function getToken(): Promise<string | null> {
@@ -23,33 +21,43 @@ async function request<T>(path: string, options: RequestInit = {}, auth = true):
 
 export interface AuthResponse {
   token: string;
-  user: { id: string; email: string };
+  user: { id: string; username: string };
 }
 
 export const NetworkService = {
-  register: (email: string, password: string) =>
-    request<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }, false),
+  register: (username: string, password: string) =>
+    request<AuthResponse>(
+      '/auth/register',
+      { method: 'POST', body: JSON.stringify({ username, password }) },
+      false,
+    ),
 
-  login: (email: string, password: string) =>
-    request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false),
+  login: (username: string, password: string) =>
+    request<AuthResponse>(
+      '/auth/login',
+      { method: 'POST', body: JSON.stringify({ username, password }) },
+      false,
+    ),
 
-  storeKeyHalf: (split: KeySplit) =>
-    request<{ success: boolean }>('/wallet/store-key-half', {
+  storeWallet: (split: CombinedKeySplit) =>
+    request<{ success: boolean }>('/wallet/store', {
       method: 'POST',
       body: JSON.stringify({
-        chain: split.chain,
-        walletId: split.walletId,
-        serverKeyHalf: split.serverHalf,
-        salt: split.bundle.salt,
-        iv: split.bundle.iv,
-        tag: split.bundle.tag,
-        publicAddress: split.publicAddress,
+        walletId:   split.walletId,
+        serverHalf: split.serverHalf,
+        salt:       split.bundle.salt,
+        iv:         split.bundle.iv,
+        tag:        split.bundle.tag,
+        ethAddress: split.ethAddress,
+        solAddress: split.solAddress,
       }),
     }),
 
-  fetchServerKeyHalf: (walletId: string) =>
-    request<ServerKeyHalfResponse>(`/wallet/key-half/${walletId}`),
+  fetchWallet: (walletId: string) =>
+    request<ServerWalletResponse>(`/wallet/fetch/${walletId}`),
 
-  fetchMyWallets: () =>
-    request<{ wallets: Array<{ chain: string; walletId: string; publicAddress: string }> }>('/wallet/my-wallets'),
+  fetchMyWallet: () =>
+    request<{ wallet: { walletId: string; ethAddress: string; solAddress: string; createdAt: string } | null }>(
+      '/wallet/me'
+    ),
 };
