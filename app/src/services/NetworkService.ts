@@ -3,7 +3,7 @@ import type { KeySplit, ServerKeyHalfResponse } from '../types';
 
 // Change to your server URL. In Expo Go / dev, use your machine's local IP.
 // e.g. 'http://192.168.1.x:3001'  (Android emulator needs real IP, not localhost)
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = 'http://62.146.173.162:3004';
 
 async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem('authToken');
