@@ -48,23 +48,30 @@ export default function VerifyCardScreen() {
         <TouchableOpacity style={s.logoutBtn} onPress={logout}>
           <Text style={s.logoutText}>Sign out</Text>
         </TouchableOpacity>
+
+        {/* Dev bypass — subtle, bottom of screen */}
+        <TouchableOpacity style={s.skipBtn} onPress={setCardVerified}>
+          <Text style={s.skipText}>skip</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: '#0F0C29', justifyContent: 'center' },
-  content: { paddingHorizontal: 32, alignItems: 'center', gap: 20 },
-  icon:    { fontSize: 80 },
-  title:   { fontSize: 28, fontWeight: '700', color: '#fff' },
-  sub:     { color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
-  error:   { color: '#f87171', textAlign: 'center' },
+  root:      { flex: 1, backgroundColor: '#0F0C29', justifyContent: 'center' },
+  content:   { paddingHorizontal: 32, alignItems: 'center', gap: 20 },
+  icon:      { fontSize: 80 },
+  title:     { fontSize: 28, fontWeight: '700', color: '#fff' },
+  sub:       { color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22 },
+  error:     { color: '#f87171', textAlign: 'center' },
   btn: {
     backgroundColor: '#A855F7', borderRadius: 14,
     padding: 18, alignItems: 'center', width: '100%',
   },
-  btnText:    { color: '#fff', fontWeight: '700', fontSize: 17 },
-  logoutBtn:  { marginTop: 8 },
-  logoutText: { color: 'rgba(255,255,255,0.35)', fontSize: 14 },
+  btnText:   { color: '#fff', fontWeight: '700', fontSize: 17 },
+  logoutBtn: { marginTop: 8 },
+  logoutText:{ color: 'rgba(255,255,255,0.35)', fontSize: 14 },
+  skipBtn:   { marginTop: 16 },
+  skipText:  { color: 'rgba(255,255,255,0.12)', fontSize: 12 },
 });

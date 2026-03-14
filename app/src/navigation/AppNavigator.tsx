@@ -4,12 +4,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useApp } from '../store/AppContext';
 
-import OnboardingScreen   from '../screens/OnboardingScreen';
-import CreateWalletScreen from '../screens/CreateWalletScreen';
-import VerifyCardScreen   from '../screens/VerifyCardScreen';
-import BalanceScreen      from '../screens/BalanceScreen';
-import ReceiveScreen      from '../screens/ReceiveScreen';
-import SendScreen         from '../screens/SendScreen';
+import OnboardingScreen     from '../screens/OnboardingScreen';
+import CreateWalletScreen   from '../screens/CreateWalletScreen';
+import VerifyCardScreen     from '../screens/VerifyCardScreen';
+import BalanceScreen        from '../screens/BalanceScreen';
+import ReceiveScreen        from '../screens/ReceiveScreen';
+import SendScreen           from '../screens/SendScreen';
+import ReprogramCardScreen  from '../screens/ReprogramCardScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -38,6 +39,11 @@ function HomeTabs() {
         name="Pay"
         component={SendScreen}
         options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>📲</Text> }}
+      />
+      <Tab.Screen
+        name="Card"
+        component={ReprogramCardScreen}
+        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📡</Text> }}
       />
     </Tab.Navigator>
   );
