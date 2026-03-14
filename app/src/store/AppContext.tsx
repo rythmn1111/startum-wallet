@@ -3,81 +3,93 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NetworkService } from '../services/NetworkService';
 
 interface AppState {
-  isLoggedIn: boolean;
-  hasWallet: boolean;
-  authToken: string | null;
-  ethAddress: string;
-  solAddress: string;
+  isLoggedIn:     boolean;
+  hasWallet:      boolean;
+  isCardVerified: boolean; // must tap NFC card once per session after login
+  authToken:      string | null;
+  ethAddress:     string;
+  solAddress:     string;
+  walletId:       string; // server walletId — used to verify NFC card tap
 }
 
 interface AppContextValue extends AppState {
-  login: (token: string) => Promise<void>;
-  logout: () => Promise<void>;
-  saveWalletAddresses: (eth: string, sol: string) => Promise<void>;
+  login:               (token: string) => Promise<void>;
+  logout:              () => Promise<void>;
+  saveWalletAddresses: (eth: string, sol: string, wid: string) => Promise<void>;
+  setCardVerified:     () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>({
-    isLoggedIn: false,
-    hasWallet: false,
-    authToken: null,
-    ethAddress: '',
-    solAddress: '',
+    isLoggedIn:     false,
+    hasWallet:      false,
+    isCardVerified: false,
+    authToken:      null,
+    ethAddress:     '',
+    solAddress:     '',
+    walletId:       '',
   });
 
-  // Restore session on app start
+  // Restore session on app start — card always needs re-tap each session
   useEffect(() => {
     (async () => {
       const token = await AsyncStorage.getItem('authToken');
       if (!token) return;
-      // Token exists — check server for wallet
       try {
         const { wallet } = await NetworkService.fetchMyWallet();
         setState({
-          isLoggedIn: true,
-          hasWallet: !!wallet,
-          authToken: token,
-          ethAddress: wallet?.ethAddress ?? '',
-          solAddress: wallet?.solAddress ?? '',
+          isLoggedIn:     true,
+          hasWallet:      !!wallet,
+          isCardVerified: false, // always false on fresh app open
+          authToken:      token,
+          ethAddress:     wallet?.ethAddress ?? '',
+          solAddress:     wallet?.solAddress ?? '',
+          walletId:       wallet?.walletId   ?? '',
         });
       } catch {
-        // Token expired or network error — still mark as logged in, no wallet
-        setState({ isLoggedIn: true, hasWallet: false, authToken: token, ethAddress: '', solAddress: '' });
+        setState(s => ({ ...s, isLoggedIn: true, authToken: token }));
       }
     })();
   }, []);
 
   const login = async (token: string) => {
-    // Save token first so NetworkService can pick it up
     await AsyncStorage.setItem('authToken', token);
-    // Check if this account already has a wallet
     try {
       const { wallet } = await NetworkService.fetchMyWallet();
       setState({
-        isLoggedIn: true,
-        hasWallet: !!wallet,
-        authToken: token,
-        ethAddress: wallet?.ethAddress ?? '',
-        solAddress: wallet?.solAddress ?? '',
+        isLoggedIn:     true,
+        hasWallet:      !!wallet,
+        isCardVerified: false, // card tap required after every login
+        authToken:      token,
+        ethAddress:     wallet?.ethAddress ?? '',
+        solAddress:     wallet?.solAddress ?? '',
+        walletId:       wallet?.walletId   ?? '',
       });
     } catch {
-      setState(s => ({ ...s, isLoggedIn: true, authToken: token }));
+      setState(s => ({ ...s, isLoggedIn: true, authToken: token, isCardVerified: false }));
     }
   };
 
   const logout = async () => {
     await AsyncStorage.removeItem('authToken');
-    setState({ isLoggedIn: false, hasWallet: false, authToken: null, ethAddress: '', solAddress: '' });
+    setState({
+      isLoggedIn: false, hasWallet: false, isCardVerified: false,
+      authToken: null, ethAddress: '', solAddress: '', walletId: '',
+    });
   };
 
-  const saveWalletAddresses = async (eth: string, sol: string) => {
-    setState(s => ({ ...s, hasWallet: true, ethAddress: eth, solAddress: sol }));
+  const saveWalletAddresses = async (eth: string, sol: string, wid: string) => {
+    setState(s => ({ ...s, hasWallet: true, isCardVerified: true, ethAddress: eth, solAddress: sol, walletId: wid }));
+  };
+
+  const setCardVerified = () => {
+    setState(s => ({ ...s, isCardVerified: true }));
   };
 
   return (
-    <AppContext.Provider value={{ ...state, login, logout, saveWalletAddresses }}>
+    <AppContext.Provider value={{ ...state, login, logout, saveWalletAddresses, setCardVerified }}>
       {children}
     </AppContext.Provider>
   );

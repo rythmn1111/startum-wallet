@@ -4,14 +4,15 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useApp } from '../store/AppContext';
 
-import OnboardingScreen from '../screens/OnboardingScreen';
+import OnboardingScreen   from '../screens/OnboardingScreen';
 import CreateWalletScreen from '../screens/CreateWalletScreen';
-import BalanceScreen from '../screens/BalanceScreen';
-import ReceiveScreen from '../screens/ReceiveScreen';
-import SendScreen from '../screens/SendScreen';
+import VerifyCardScreen   from '../screens/VerifyCardScreen';
+import BalanceScreen      from '../screens/BalanceScreen';
+import ReceiveScreen      from '../screens/ReceiveScreen';
+import SendScreen         from '../screens/SendScreen';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Tab   = createBottomTabNavigator();
 
 function HomeTabs() {
   return (
@@ -43,7 +44,7 @@ function HomeTabs() {
 }
 
 export default function AppNavigator() {
-  const { isLoggedIn, hasWallet } = useApp();
+  const { isLoggedIn, hasWallet, isCardVerified } = useApp();
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -51,6 +52,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       ) : !hasWallet ? (
         <Stack.Screen name="CreateWallet" component={CreateWalletScreen} />
+      ) : !isCardVerified ? (
+        <Stack.Screen name="VerifyCard" component={VerifyCardScreen} />
       ) : (
         <Stack.Screen name="Home" component={HomeTabs} />
       )}

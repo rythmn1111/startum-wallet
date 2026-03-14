@@ -207,7 +207,7 @@ export default function CreateWalletScreen() {
             <Text style={s.addrLabel}>SOL (Devnet)</Text>
             <Text style={s.addr}>{solAddress}</Text>
           </View>
-          <TouchableOpacity style={s.btn} onPress={() => saveWalletAddresses(ethAddress, solAddress)}>
+          <TouchableOpacity style={s.btn} onPress={() => saveWalletAddresses(ethAddress, solAddress, split?.walletId ?? '')}>
             <Text style={s.btnText}>Open Wallet</Text>
           </TouchableOpacity>
         </View>
