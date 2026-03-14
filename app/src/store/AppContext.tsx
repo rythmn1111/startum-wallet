@@ -10,6 +10,7 @@ interface AppState {
   ethAddress:     string;
   solAddress:     string;
   walletId:       string; // server walletId — used to verify NFC card tap
+  ensName:        string; // user's ENS name e.g. "rythmn.eth" (optional)
 }
 
 interface AppContextValue extends AppState {
@@ -17,6 +18,7 @@ interface AppContextValue extends AppState {
   logout:              () => Promise<void>;
   saveWalletAddresses: (eth: string, sol: string, wid: string) => Promise<void>;
   setCardVerified:     () => void;
+  setEnsName:          (name: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -30,45 +32,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ethAddress:     '',
     solAddress:     '',
     walletId:       '',
+    ensName:        '',
   });
 
   // Restore session on app start — card always needs re-tap each session
   useEffect(() => {
     (async () => {
-      const token = await AsyncStorage.getItem('authToken');
+      const token   = await AsyncStorage.getItem('authToken');
+      const ensName = await AsyncStorage.getItem('ensName') ?? '';
       if (!token) return;
       try {
         const { wallet } = await NetworkService.fetchMyWallet();
         setState({
           isLoggedIn:     true,
           hasWallet:      !!wallet,
-          isCardVerified: false, // always false on fresh app open
+          isCardVerified: false,
           authToken:      token,
           ethAddress:     wallet?.ethAddress ?? '',
           solAddress:     wallet?.solAddress ?? '',
           walletId:       wallet?.walletId   ?? '',
+          ensName,
         });
       } catch {
-        setState(s => ({ ...s, isLoggedIn: true, authToken: token }));
+        setState(s => ({ ...s, isLoggedIn: true, authToken: token, ensName }));
       }
     })();
   }, []);
 
   const login = async (token: string) => {
     await AsyncStorage.setItem('authToken', token);
+    const ensName = await AsyncStorage.getItem('ensName') ?? '';
     try {
       const { wallet } = await NetworkService.fetchMyWallet();
       setState({
         isLoggedIn:     true,
         hasWallet:      !!wallet,
-        isCardVerified: false, // card tap required after every login
+        isCardVerified: false,
         authToken:      token,
         ethAddress:     wallet?.ethAddress ?? '',
         solAddress:     wallet?.solAddress ?? '',
         walletId:       wallet?.walletId   ?? '',
+        ensName,
       });
     } catch {
-      setState(s => ({ ...s, isLoggedIn: true, authToken: token, isCardVerified: false }));
+      setState(s => ({ ...s, isLoggedIn: true, authToken: token, isCardVerified: false, ensName }));
     }
   };
 
@@ -76,8 +83,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem('authToken');
     setState({
       isLoggedIn: false, hasWallet: false, isCardVerified: false,
-      authToken: null, ethAddress: '', solAddress: '', walletId: '',
+      authToken: null, ethAddress: '', solAddress: '', walletId: '', ensName: '',
     });
+  };
+
+  const setEnsName = async (name: string) => {
+    await AsyncStorage.setItem('ensName', name);
+    setState(s => ({ ...s, ensName: name }));
   };
 
   const saveWalletAddresses = async (eth: string, sol: string, wid: string) => {
@@ -89,7 +101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AppContext.Provider value={{ ...state, login, logout, saveWalletAddresses, setCardVerified }}>
+    <AppContext.Provider value={{ ...state, login, logout, saveWalletAddresses, setCardVerified, setEnsName }}>
       {children}
     </AppContext.Provider>
   );

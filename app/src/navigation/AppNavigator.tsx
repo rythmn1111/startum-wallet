@@ -11,6 +11,7 @@ import BalanceScreen        from '../screens/BalanceScreen';
 import ReceiveScreen        from '../screens/ReceiveScreen';
 import SendScreen           from '../screens/SendScreen';
 import ReprogramCardScreen  from '../screens/ReprogramCardScreen';
+import ENSProfileScreen     from '../screens/ENSProfileScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -44,6 +45,11 @@ function HomeTabs() {
         name="Card"
         component={ReprogramCardScreen}
         options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>📡</Text> }}
+      />
+      <Tab.Screen
+        name="ENS"
+        component={ENSProfileScreen}
+        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 18 }}>🔷</Text> }}
       />
     </Tab.Navigator>
   );

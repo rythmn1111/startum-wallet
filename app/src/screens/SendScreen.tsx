@@ -5,7 +5,7 @@
  * The PAYER taps their NFC card on this phone and enters their password.
  * Funds move: payer's wallet → receiver's wallet.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator,
@@ -14,6 +14,7 @@ import { NFCService } from '../services/NFCService';
 import { NetworkService } from '../services/NetworkService';
 import { reconstructKeys } from '../services/WalletService';
 import { hexToBytes } from '../services/CryptoService';
+import { ENSService, ENSPaymentProfile } from '../services/ENSService';
 import { useApp } from '../store/AppContext';
 
 type Step = 'select' | 'amount' | 'nfc' | 'password' | 'sending' | 'done';
@@ -54,7 +55,7 @@ async function sendSol(fromPrivKeyHex: string, toAddress: string, amountSol: str
 }
 
 export default function SendScreen() {
-  const { ethAddress, solAddress } = useApp();
+  const { ethAddress, solAddress, ensName } = useApp();
 
   const [step, setStep]         = useState<Step>('select');
   const [chain, setChain]       = useState<'ETH' | 'SOL'>('ETH');
@@ -66,6 +67,20 @@ export default function SendScreen() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
 
+  // ENS profile of the receiver (logged-in user)
+  const [ensProfile, setEnsProfile] = useState<ENSPaymentProfile | null>(null);
+  const [ensLoading, setEnsLoading] = useState(false);
+
+  // Fetch receiver's ENS profile whenever chain = ETH and ensName is set
+  useEffect(() => {
+    if (!ensName || chain !== 'ETH') { setEnsProfile(null); return; }
+    setEnsLoading(true);
+    ENSService.resolveProfile(ensName)
+      .then(p => setEnsProfile(p))
+      .catch(() => setEnsProfile(null))
+      .finally(() => setEnsLoading(false));
+  }, [ensName, chain]);
+
   const myAddress = chain === 'ETH' ? ethAddress : solAddress;
 
   const selectChain = (c: 'ETH' | 'SOL') => {
@@ -75,6 +90,11 @@ export default function SendScreen() {
 
   const goToNfc = () => {
     if (!amount.trim()) { setError('Enter an amount'); return; }
+    // ENS policy: enforce max-amount
+    if (ensProfile?.maxAmount !== undefined && parseFloat(amount) > ensProfile.maxAmount) {
+      setError(`Your ENS profile rejects payments above ${ensProfile.maxAmount} ETH`);
+      return;
+    }
     setError('');
     setStep('nfc');
     NFCService.readCard()
@@ -100,21 +120,47 @@ export default function SendScreen() {
       const { ethPrivKey, solPrivKey } = await reconstructKeys(payerNfcHalf, payerServer, password);
 
       let hash: string;
+      const amountNum = parseFloat(amount.trim());
 
       if (chain === 'ETH') {
-        // Try BitGo first — co-signed transaction, NFC card enforces authorisation
+        // Compute amounts accounting for ENS auto-split
+        let mainAmount   = amount.trim();
+        let splitAddress = '';
+        let splitAmount  = '';
+
+        if (ensProfile?.autoSplit) {
+          const split = await ENSService.parseSplit(ensProfile.autoSplit);
+          if (split) {
+            const splitEth = (amountNum * split.percentage / 100).toFixed(6);
+            const mainEth  = (amountNum - parseFloat(splitEth)).toFixed(6);
+            mainAmount   = mainEth;
+            splitAddress = split.targetAddress;
+            splitAmount  = splitEth;
+          }
+        }
+
+        // Try BitGo first — co-signed, NFC card enforces authorisation
         try {
-          const result = await NetworkService.bitgoSend(payerWalletId, myAddress, amount.trim(), password);
+          const result = await NetworkService.bitgoSend(payerWalletId, myAddress, mainAmount, password);
           hash = result.txHash;
+          // Auto-split: send split portion via BitGo too
+          if (splitAddress && splitAmount) {
+            await NetworkService.bitgoSend(payerWalletId, splitAddress, splitAmount, password).catch(() =>
+              sendEth(ethPrivKey, splitAddress, splitAmount)
+            );
+          }
         } catch {
           // BitGo wallet not provisioned — fall back to direct send
-          hash = await sendEth(ethPrivKey, myAddress, amount.trim());
+          hash = await sendEth(ethPrivKey, myAddress, mainAmount);
+          if (splitAddress && splitAmount) {
+            await sendEth(ethPrivKey, splitAddress, splitAmount).catch(() => {});
+          }
         }
       } else {
         hash = await sendSol(solPrivKey, myAddress, amount.trim());
       }
 
-      setTxHash(hash);
+      setTxHash(hash!);
       setStep('done');
     } catch (e: any) {
       setError(e.message);
@@ -163,6 +209,38 @@ export default function SendScreen() {
         <Text style={s.receiverLabel}>Sending to your wallet</Text>
         <Text style={s.receiverAddr} numberOfLines={1}>{myAddress}</Text>
       </View>
+
+      {/* ENS profile card — shown when receiver has an ENS config */}
+      {chain === 'ETH' && ensName && (
+        ensLoading ? (
+          <View style={s.ensLoadingRow}>
+            <ActivityIndicator size="small" color="#A855F7" />
+            <Text style={s.ensLoadingText}>Loading {ensName} profile…</Text>
+          </View>
+        ) : ensProfile ? (
+          <View style={s.ensCard}>
+            <View style={s.ensCardHeader}>
+              <Text style={s.ensCardName}>🔷 {ensProfile.ensName}</Text>
+              <Text style={s.ensCardTag}>ENS Policy Active</Text>
+            </View>
+            {ensProfile.maxAmount !== undefined && (
+              <ENSRule icon="🚫" text={`Max ${ensProfile.maxAmount} ETH per payment`} />
+            )}
+            {ensProfile.autoSplit && (
+              <ENSRule icon="✂️" text={`Auto-split: ${ensProfile.autoSplit}`} />
+            )}
+            {ensProfile.receiveAs && (
+              <ENSRule icon="💱" text={`Prefers ${ensProfile.receiveAs}`} />
+            )}
+            {ensProfile.privacy && (
+              <ENSRule icon="🔒" text="Privacy mode — fresh BitGo address" />
+            )}
+            {ensProfile.nfcRequired && (
+              <ENSRule icon="📡" text="NFC tap required" />
+            )}
+          </View>
+        ) : null
+      )}
 
       <Text style={s.label}>Amount ({chain})</Text>
       <TextInput
@@ -270,6 +348,15 @@ export default function SendScreen() {
   );
 }
 
+function ENSRule({ icon, text }: { icon: string; text: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      <Text style={{ fontSize: 13 }}>{icon}</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{text}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   root:          { flex: 1, backgroundColor: '#0F0C29' },
   scrollContent: { padding: 24, paddingTop: 60, gap: 14, flexGrow: 1 },
@@ -325,4 +412,15 @@ const s = StyleSheet.create({
   },
   hashLabel: { color: '#A855F7', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   hash:      { color: '#fff', fontSize: 11, fontFamily: 'monospace', lineHeight: 18 },
+
+  // ENS profile card
+  ensLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ensLoadingText: { color: 'rgba(255,255,255,0.4)', fontSize: 13 },
+  ensCard: {
+    backgroundColor: 'rgba(99,102,241,0.12)', borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)',
+  },
+  ensCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  ensCardName:   { color: '#fff', fontWeight: '700', fontSize: 14 },
+  ensCardTag:    { color: '#818cf8', fontSize: 11, fontWeight: '700' },
 });
