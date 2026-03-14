@@ -11,7 +11,7 @@ import { hexToBytes } from '../services/CryptoService';
 type Step = 'idle' | 'nfc' | 'password' | 'sending' | 'done';
 
 // Testnets
-const ETH_RPC = 'https://rpc2.sepolia.org';
+const ETH_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
 const SOL_RPC = 'https://api.devnet.solana.com';
 
 async function sendEth(ethPrivKeyHex: string, to: string, amountEth: string): Promise<string> {

@@ -6,7 +6,7 @@ import {
 import { useApp } from '../store/AppContext';
 
 // Testnets — no API key needed
-const ETH_RPC = 'https://rpc2.sepolia.org';
+const ETH_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
 const SOL_RPC = 'https://api.devnet.solana.com';
 
 async function fetchEthBalance(address: string): Promise<string> {
