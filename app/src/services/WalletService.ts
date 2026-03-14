@@ -16,14 +16,18 @@ import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { HDKey } from '@scure/bip32';
 import { ethers } from 'ethers';
-import { hmac } from '@noble/hashes/hmac';
-import { sha512 } from '@noble/hashes/sha512';
 import QuickCrypto from 'react-native-quick-crypto';
 import { encrypt, decrypt, xorSplit, xorCombine, hexToBytes, bytesToHex } from './CryptoService';
 import type { CombinedKeySplit, ServerWalletResponse } from '../types';
 
+function hmacSha512(key: Uint8Array, data: Uint8Array): Uint8Array {
+  const h = QuickCrypto.createHmac('sha512', Buffer.from(key));
+  h.update(Buffer.from(data));
+  return new Uint8Array(h.digest() as ArrayBuffer);
+}
+
 function slip10DeriveEd25519(seed: Uint8Array, path: string): Uint8Array {
-  let I = hmac(sha512, new TextEncoder().encode('ed25519 seed'), seed);
+  let I = hmacSha512(new TextEncoder().encode('ed25519 seed'), seed);
   let key = I.slice(0, 32);
   let chainCode = I.slice(32);
 
@@ -35,7 +39,7 @@ function slip10DeriveEd25519(seed: Uint8Array, path: string): Uint8Array {
     data[0] = 0x00;
     data.set(key, 1);
     new DataView(data.buffer).setUint32(33, index, false);
-    I = hmac(sha512, chainCode, data);
+    I = hmacSha512(chainCode, data);
     key = I.slice(0, 32);
     chainCode = I.slice(32);
   }

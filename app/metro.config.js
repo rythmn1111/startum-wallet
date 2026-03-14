@@ -2,6 +2,9 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+// Enable package.json "exports" field resolution (needed for @noble/*, @scure/*)
+config.resolver.unstable_enablePackageExports = true;
+
 // Polyfill Node.js core modules needed by ethers, @solana/web3.js, etc.
 config.resolver.extraNodeModules = {
   crypto: require.resolve('react-native-quick-crypto'),
