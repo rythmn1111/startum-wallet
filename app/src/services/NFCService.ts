@@ -23,6 +23,10 @@ async function ensureInit() {
 }
 
 export const NFCService = {
+  cancelScan: () => {
+    NfcManager.cancelTechnologyRequest().catch(() => {});
+  },
+
   isSupported: async (): Promise<boolean> => {
     try {
       await ensureInit();
