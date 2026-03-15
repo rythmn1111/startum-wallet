@@ -80,7 +80,7 @@ function Section({ label }: { label: string }) {
 
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function SettingsScreen() {
-  const { ethAddress, ensName } = useApp();
+  const { ethAddress, ensName, logout } = useApp();
   const fadeIn  = useRef(new Animated.Value(0)).current;
   const slideIn = useRef(new Animated.Value(20)).current;
 
@@ -158,7 +158,7 @@ export default function SettingsScreen() {
           {/* Danger */}
           <Section label="DANGER ZONE" />
           <GradientCard noPadding style={styles.groupCard}>
-            <SettingRow icon="log-out"  label="Sign Out"      onPress={() => {}} danger />
+            <SettingRow icon="log-out"  label="Sign Out"      onPress={() => { void logout(); }} danger />
             <View style={styles.divider} />
             <SettingRow icon="trash-2"  label="Delete Wallet" onPress={() => {}} danger />
           </GradientCard>
