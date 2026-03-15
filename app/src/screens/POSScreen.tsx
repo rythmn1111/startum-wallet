@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 
@@ -235,6 +236,7 @@ export default function POSScreen() {
   };
 
   const copyAddress = () => {
+    Clipboard.setStringAsync(displayAddress);
     setCopyDone(true);
     setTimeout(() => setCopyDone(false), 1500);
   };
