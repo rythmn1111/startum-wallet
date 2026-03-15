@@ -78,6 +78,22 @@ export const NetworkService = {
   getBitgoBalance: () =>
     request<{ balanceWei: string; confirmedWei: string }>('/bitgo/balance'),
 
+  // ── Fileverse Receipts ─────────────────────────────────────────────────────
+
+  /** Create an E2E encrypted Fileverse receipt after a payment. Fire-and-forget. */
+  createReceipt: (params: {
+    txHash: string; amount: string; chain: string;
+    receiverAddress: string; receiverEns?: string;
+  }) =>
+    request<{ ddocId: string; docUrl: string; title: string }>('/receipts', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  /** List all past payment receipts. */
+  listReceipts: () =>
+    request<Array<{ ddocId: string; title: string; docUrl: string; createdAt: string }>>('/receipts'),
+
   /**
    * POS send: transfer ETH from the payer's BitGo wallet to receiver's address.
    * payerWalletId comes from the NFC card scan.

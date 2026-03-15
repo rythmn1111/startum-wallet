@@ -162,6 +162,15 @@ export default function SendScreen() {
 
       setTxHash(hash!);
       setStep('done');
+
+      // Fire-and-forget: create encrypted Fileverse receipt — doesn't block payment UX
+      NetworkService.createReceipt({
+        txHash: hash!,
+        amount: amount.trim(),
+        chain,
+        receiverAddress: myAddress,
+        receiverEns: ensName || undefined,
+      }).catch(() => {}); // silently ignore — receipt is best-effort
     } catch (e: any) {
       setError(e.message);
     } finally {

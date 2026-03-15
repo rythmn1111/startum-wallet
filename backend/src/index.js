@@ -6,7 +6,8 @@ const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
 const walletRoutes = require('./routes/wallet');
-const bitgoRoutes = require('./routes/bitgo');
+const bitgoRoutes    = require('./routes/bitgo');
+const receiptsRoutes = require('./routes/receipts');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use(
 app.use('/auth', authRoutes);
 app.use('/wallet', walletRoutes);
 app.use('/bitgo', bitgoRoutes);
+app.use('/receipts', receiptsRoutes);
 
 app.get('/health', (_, res) => res.json({ ok: true }));
 
