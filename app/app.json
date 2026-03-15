@@ -17,15 +17,21 @@
         "NFCReaderUsageDescription": "NFC Wallet uses NFC to read and write your encrypted wallet key half stored on your NFC card."
       },
       "entitlements": {
-        "com.apple.developer.nfc.readersession.formats": ["NDEF", "TAG"]
+        "com.apple.developer.nfc.readersession.formats": [
+          "NDEF",
+          "TAG"
+        ]
       }
     },
     "android": {
       "package": "com.nfcwallet.app",
-      "permissions": ["android.permission.NFC"]
+      "permissions": [
+        "android.permission.NFC"
+      ]
     },
     "plugins": [
-      "react-native-nfc-manager"
+      "react-native-nfc-manager",
+      "expo-font"
     ]
   }
 }
